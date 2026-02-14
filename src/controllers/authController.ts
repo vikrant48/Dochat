@@ -10,7 +10,8 @@ export const getUsers = async (req: Request, res: Response) => {
         });
         res.json(users);
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching users', error });
+        console.error('Fetch Users Error:', error);
+        res.status(500).json({ message: 'Error fetching users', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 
@@ -43,7 +44,8 @@ export const registerUser = async (req: Request, res: Response) => {
             token: generateToken(user.id),
         });
     } catch (error) {
-        res.status(500).json({ message: 'Server error', error });
+        console.error('Registration Error:', error);
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 
@@ -64,6 +66,7 @@ export const loginUser = async (req: Request, res: Response) => {
             res.status(401).json({ message: 'Invalid email or password' });
         }
     } catch (error) {
-        res.status(500).json({ message: 'Server error', error });
+        console.error('Login Error:', error);
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
