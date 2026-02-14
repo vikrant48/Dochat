@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import { prisma } from '../server';
 
 export const getMessages = async (req: Request, res: Response) => {
-    const { userId, otherUserId } = req.params;
+    const userId = req.params.userId as string;
+    const otherUserId = req.params.otherUserId as string;
 
     try {
         const messages = await prisma.message.findMany({
