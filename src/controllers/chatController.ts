@@ -95,3 +95,29 @@ export const sendMessage = async (req: any, res: Response) => {
         res.status(500).json({ message: 'Error sending message', error });
     }
 };
+export const getGroupMessages = async (req: any, res: Response) => {
+    const { groupId } = req.params;
+    const userId = req.user.id;
+
+    try {
+        const membership = await prisma.groupMember.findUnique({
+            where: { groupId_userId: { groupId, userId } }
+        });
+
+        if (!membership || membership.status !== 'ACCEPTED') {
+            return res.status(403).json({ message: 'You must be a member of this group' });
+        }
+
+        const messages = await prisma.message.findMany({
+            where: { groupId },
+            include: {
+                sender: { select: { id: true, username: true, avatar: true } }
+            },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        res.json(messages);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching group messages', error });
+    }
+};

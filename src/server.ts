@@ -8,6 +8,7 @@ import authRoutes from './routes/authRoutes';
 import postRoutes from './routes/postRoutes';
 import chatRoutes from './routes/chatRoutes';
 import friendRoutes from './routes/friendRoutes';
+import groupRoutes from './routes/groupRoutes';
 
 const app = express();
 const server = http.createServer(app);
@@ -27,6 +28,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/messages', chatRoutes);
 app.use('/api/friends', friendRoutes);
+app.use('/api/groups', groupRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('SocialChat Backend Running');
@@ -41,8 +43,41 @@ io.on('connection', (socket) => {
         console.log(`User ${userId} joined their room`);
     });
 
-    socket.on('sendMessage', async (data: { senderId: string; receiverId: string; content: string }) => {
+    socket.on('joinGroupRooms', (groupIds: string[]) => {
+        groupIds.forEach(id => socket.join(id));
+        console.log(`User joined group rooms: ${groupIds}`);
+    });
+
+    socket.on('sendMessage', async (data: { senderId: string; receiverId?: string; groupId?: string; content: string }) => {
         try {
+            if (data.groupId) {
+                // Group Message logic
+                const membership = await prisma.groupMember.findUnique({
+                    where: { groupId_userId: { groupId: data.groupId, userId: data.senderId } }
+                });
+
+                if (!membership || membership.status !== 'ACCEPTED') {
+                    io.to(data.senderId).emit('error', { message: 'You are not a member of this group' });
+                    return;
+                }
+
+                const message = await prisma.message.create({
+                    data: {
+                        senderId: data.senderId,
+                        groupId: data.groupId,
+                        content: data.content
+                    },
+                    include: {
+                        sender: { select: { id: true, username: true, avatar: true } }
+                    }
+                });
+
+                io.to(data.groupId).emit('newGroupMessage', message);
+                return;
+            }
+
+            if (!data.receiverId) return;
+
             // SECURITY: Check connections
             const connection = await prisma.friendRequest.findFirst({
                 where: {

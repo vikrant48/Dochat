@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { prisma } from '../server';
+import { Response } from 'express';
+import { prisma, io } from '../server';
 
 export const sendFriendRequest = async (req: any, res: Response) => {
     const { receiverId } = req.body;
@@ -29,8 +29,16 @@ export const sendFriendRequest = async (req: any, res: Response) => {
                 senderId,
                 receiverId,
                 status: 'PENDING'
+            },
+            include: {
+                sender: {
+                    select: { id: true, username: true, avatar: true }
+                }
             }
         });
+
+        // Notify receiver via socket
+        io.to(receiverId).emit('newFriendRequest', request);
 
         res.status(201).json(request);
     } catch (error) {
