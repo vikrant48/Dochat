@@ -19,10 +19,31 @@ model User {
   likes         Like[]
   sentMessages  Message[]      @relation("SentMessages")
   receivedMessages Message[]   @relation("ReceivedMessages")
+  sentRequests     FriendRequest[] @relation("SentRequests")
+  receivedRequests FriendRequest[] @relation("ReceivedRequests")
   followers     Follows[]      @relation("following")
   following     Follows[]      @relation("follower")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+model FriendRequest {
+  id         String   @id @default(uuid())
+  senderId   String
+  sender     User     @relation("SentRequests", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User     @relation("ReceivedRequests", fields: [receiverId], references: [id])
+  status     RequestStatus @default(PENDING)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([senderId, receiverId])
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
 }
 
 model Post {
@@ -65,6 +86,7 @@ model Message {
   receiverId String
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   content    String
+  isDelivered Boolean @default(false)
   isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
 }
