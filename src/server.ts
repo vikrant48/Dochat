@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/authRoutes';
 import postRoutes from './routes/postRoutes';
+import chatRoutes from './routes/chatRoutes';
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +24,7 @@ app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
+app.use('/api/messages', chatRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('SocialChat Backend Running');
