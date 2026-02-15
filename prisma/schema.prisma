@@ -14,6 +14,7 @@ model User {
   password      String
   avatar        String?
   bio           String?
+  pushToken     String?
   posts         Post[]
   comments      Comment[]
   likes         Like[]
@@ -24,8 +25,42 @@ model User {
   followers     Follows[]      @relation("following")
   following     Follows[]      @relation("follower")
   groupMemberships GroupMember[] @relation("GroupMemberships")
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  stories       Story[]
+  twoFactorEnabled Boolean        @default(false)
+  twoFactorOTP     String?
+  reports          Report[]       @relation("Reporter")
+  reportedBy       Report[]       @relation("Reported")
+  blockedUsers     Block[]        @relation("Blocker")
+  blockedBy        Block[]        @relation("Blocked")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model Report {
+  id         String   @id @default(uuid())
+  reporterId String
+  reporter   User     @relation("Reporter", fields: [reporterId], references: [id])
+  targetId   String
+  targetUser User?    @relation("Reported", fields: [targetId], references: [id])
+  reason     String
+  type       ReportType
+  createdAt  DateTime @default(now())
+}
+
+enum ReportType {
+  POST
+  USER
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id])
+  blockedId String
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
 }
 
 model FriendRequest {
@@ -51,12 +86,20 @@ model Post {
   id        String    @id @default(uuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id])
-  imageUrl  String
+  images    String[]
   caption   String?
   likes     Like[]
   comments  Comment[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+model Story {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  imageUrl  String
+  createdAt DateTime @default(now())
 }
 
 model Comment {
@@ -91,6 +134,8 @@ model Message {
   content    String
   isDelivered Boolean @default(false)
   isRead     Boolean  @default(false)
+  isEdited   Boolean  @default(false)
+  isDeleted  Boolean  @default(false)
   createdAt  DateTime @default(now())
 }
 

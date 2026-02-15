@@ -4,17 +4,17 @@ import prisma from '../lib/prisma';
 export const createPost = async (req: any, res: Response) => {
     const { caption } = req.body;
     const userId = req.user?.id;
-    const imageUrl = req.file?.location; // URL from S3
+    const images = req.files ? (req.files as any[]).map(f => f.location) : [];
 
-    if (!imageUrl) {
-        return res.status(400).json({ message: 'Image is required' });
+    if (images.length === 0) {
+        return res.status(400).json({ message: 'At least one image is required' });
     }
 
     try {
         const post = await prisma.post.create({
             data: {
                 userId,
-                imageUrl,
+                images,
                 caption,
             },
             include: { user: { select: { username: true, avatar: true } } },
@@ -27,12 +27,18 @@ export const createPost = async (req: any, res: Response) => {
 
 export const getFeed = async (req: any, res: Response) => {
     const userId = req.user?.id;
-    const cursor = req.query.cursor as string | undefined;
+    const { cursor, search } = req.query;
     const limit = parseInt(req.query.limit as string) || 10;
 
     try {
         const queryOptions: any = {
             take: limit + 1,
+            where: search ? {
+                OR: [
+                    { caption: { contains: search as string, mode: 'insensitive' } },
+                    { user: { username: { contains: search as string, mode: 'insensitive' } } },
+                ]
+            } : {},
             include: {
                 user: { select: { id: true, username: true, avatar: true } },
                 _count: { select: { likes: true, comments: true } },

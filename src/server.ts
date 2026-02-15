@@ -3,12 +3,16 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
-import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/authRoutes';
 import postRoutes from './routes/postRoutes';
 import chatRoutes from './routes/chatRoutes';
 import friendRoutes from './routes/friendRoutes';
 import groupRoutes from './routes/groupRoutes';
+import storyRoutes from './routes/storyRoutes';
+import followRoutes from './routes/followRoutes';
+import privacyRoutes from './controllers/privacyRoutes';
+import prisma from './lib/prisma';
+import { sendPushNotification } from './services/notificationService';
 
 const app = express();
 const server = http.createServer(app);
@@ -17,8 +21,6 @@ const io = new Server(server, {
         origin: '*',
     },
 });
-
-const prisma = new PrismaClient();
 
 app.use(cors());
 app.use(helmet());
@@ -29,6 +31,9 @@ app.use('/api/posts', postRoutes);
 app.use('/api/messages', chatRoutes);
 app.use('/api/friends', friendRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/stories', storyRoutes);
+app.use('/api/follow', followRoutes);
+app.use('/api/privacy', privacyRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('TimePass Backend Running');
@@ -46,6 +51,15 @@ io.on('connection', (socket) => {
     socket.on('joinGroupRooms', (groupIds: string[]) => {
         groupIds.forEach(id => socket.join(id));
         console.log(`User joined group rooms: ${groupIds}`);
+    });
+
+    // --- Typing Indicators ---
+    socket.on('typing', (data: { senderId: string; receiverId?: string; groupId?: string; username: string; isTyping: boolean }) => {
+        if (data.groupId) {
+            socket.to(data.groupId).emit('userTyping', data);
+        } else if (data.receiverId) {
+            io.to(data.receiverId).emit('userTyping', data);
+        }
     });
 
     socket.on('sendMessage', async (data: { senderId: string; receiverId?: string; groupId?: string; content: string }) => {
@@ -73,6 +87,30 @@ io.on('connection', (socket) => {
                 });
 
                 io.to(data.groupId).emit('newGroupMessage', message);
+
+                // Push notifications for group members
+                const group = await prisma.group.findUnique({
+                    where: { id: data.groupId },
+                    select: { name: true }
+                });
+
+                const members = await prisma.groupMember.findMany({
+                    where: {
+                        groupId: data.groupId,
+                        userId: { not: data.senderId },
+                        status: 'ACCEPTED'
+                    },
+                    select: { userId: true }
+                });
+
+                members.forEach((member: { userId: string }) => {
+                    sendPushNotification(
+                        member.userId,
+                        `${group?.name || 'New Group Message'}`,
+                        `${message.sender.username}: ${data.content}`,
+                        { type: 'GROUP_MESSAGE', groupId: data.groupId }
+                    );
+                });
                 return;
             }
 
@@ -91,12 +129,26 @@ io.on('connection', (socket) => {
 
             if (!connection) {
                 console.log('Blocking message between non-friends:', data.senderId, data.receiverId);
-                // Optionally notify sender they can't message this person
                 io.to(data.senderId).emit('error', { message: 'You must be friends to chat' });
                 return;
             }
 
-            // Check if receiver is online/connected to their room
+            // Check for blocks
+            const isBlocked = await prisma.block.findFirst({
+                where: {
+                    OR: [
+                        { blockerId: data.senderId, blockedId: data.receiverId },
+                        { blockerId: data.receiverId, blockedId: data.senderId }
+                    ]
+                }
+            });
+
+            if (isBlocked) {
+                console.log('Blocking message due to block:', data.senderId, data.receiverId);
+                io.to(data.senderId).emit('error', { message: 'Message blocked' });
+                return;
+            }
+
             const receiverRoom = io.sockets.adapter.rooms.get(data.receiverId);
             const isDelivered = !!(receiverRoom && receiverRoom.size > 0);
 
@@ -109,21 +161,69 @@ io.on('connection', (socket) => {
                 },
             });
 
-            // Emit to receiver's room
             io.to(data.receiverId).emit('newMessage', message);
-            // Emit back to sender
             io.to(data.senderId).emit('messageSent', message);
 
             if (isDelivered) {
-                // If delivered instantly, notify sender
                 io.to(data.senderId).emit('messageStatusUpdate', {
                     messageId: message.id,
                     isDelivered: true,
                     isRead: false
                 });
+            } else {
+                // Sender details for notification
+                const sender = await prisma.user.findUnique({
+                    where: { id: data.senderId },
+                    select: { username: true }
+                });
+
+                sendPushNotification(
+                    data.receiverId,
+                    `New message from ${sender?.username || 'SocialChat'}`,
+                    data.content,
+                    { type: 'DIRECT_MESSAGE', senderId: data.senderId }
+                );
             }
         } catch (error) {
             console.error('Error sending message:', error);
+        }
+    });
+
+    // --- Message Management (Edit/Delete) ---
+    socket.on('editMessage', async (data: { messageId: string; senderId: string; content: string; receiverId?: string; groupId?: string }) => {
+        try {
+            const updated = await prisma.message.update({
+                where: { id: data.messageId },
+                data: { content: data.content, isEdited: true }
+            });
+
+            if (data.groupId) {
+                io.to(data.groupId).emit('messageEdited', updated);
+            } else if (data.receiverId) {
+                io.to(data.receiverId).emit('messageEdited', updated);
+                io.to(data.senderId).emit('messageEdited', updated);
+            }
+        } catch (error) {
+            console.error('Error editing message:', error);
+        }
+    });
+
+    socket.on('deleteMessage', async (data: { messageId: string; senderId: string; receiverId?: string; groupId?: string }) => {
+        try {
+            // Soft delete
+            const deleted = await prisma.message.update({
+                where: { id: data.messageId },
+                data: { content: 'This message was deleted', isDeleted: true }
+            });
+
+            if (data.groupId) {
+                io.to(data.groupId).emit('messageDeleted', { messageId: data.messageId });
+            } else if (data.receiverId) {
+                io.to(data.receiverId).emit('messageDeleted', { messageId: data.messageId });
+                io.to(data.senderId).emit('messageDeleted', { messageId: data.messageId });
+            }
+        } catch (error) {
+            console.error('Error deleting message:', error);
         }
     });
 
@@ -133,7 +233,6 @@ io.on('connection', (socket) => {
                 where: { id: data.messageId },
                 data: { isRead: true },
             });
-            // Notify the original sender that their message was read
             io.to(data.senderId).emit('messageStatusUpdate', {
                 messageId: message.id,
                 isDelivered: true,

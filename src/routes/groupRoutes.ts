@@ -7,13 +7,15 @@ import {
     respondToInvite,
     getGroupDetails,
     updateGroup,
-    manageMember
+    manageMember,
+    searchGroups
 } from '../controllers/groupController';
 
 const router = express.Router();
 
 router.use(protect);
 
+router.get('/search', searchGroups);
 router.post('/create', createGroup);
 router.get('/my-groups', getMyGroups);
 router.get('/invites', getPendingInvites);

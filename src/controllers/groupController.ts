@@ -200,3 +200,30 @@ export const manageMember = async (req: any, res: Response) => {
         res.status(500).json({ message: 'Error managing member', error });
     }
 };
+
+export const searchGroups = async (req: any, res: Response) => {
+    const { query } = req.query;
+    const userId = req.user.id;
+
+    if (!query) return res.json([]);
+
+    try {
+        const groups = await prisma.group.findMany({
+            where: {
+                name: { contains: query as string, mode: 'insensitive' },
+                members: {
+                    some: { userId, status: 'ACCEPTED' }
+                }
+            },
+            include: {
+                _count: { select: { members: true } }
+            },
+            take: 20
+        });
+
+        res.json(groups);
+    } catch (error) {
+        console.error('Search Groups Error:', error);
+        res.status(500).json({ message: 'Error searching groups', error });
+    }
+};
