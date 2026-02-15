@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
-import { prisma } from '../server';
+import prisma from '../lib/prisma';
 
-export const getMessages = async (req: Request, res: Response) => {
-    const userId = req.params.userId as string;
-    const otherUserId = req.params.otherUserId as string;
+export const getMessages = async (req: any, res: Response) => {
+    const { userId, otherUserId } = req.params;
+    const cursor = req.query.cursor as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 20;
 
     try {
         // SECURITY: Check if they are accepted friends
@@ -21,13 +22,14 @@ export const getMessages = async (req: Request, res: Response) => {
             return res.status(403).json({ message: 'You can only chat with accepted friends' });
         }
 
-        const messages = await prisma.message.findMany({
+        const queryOptions: any = {
             where: {
                 OR: [
                     { senderId: userId, receiverId: otherUserId },
                     { senderId: otherUserId, receiverId: userId },
                 ],
             },
+            take: limit + 1,
             select: {
                 id: true,
                 content: true,
@@ -38,10 +40,31 @@ export const getMessages = async (req: Request, res: Response) => {
                 createdAt: true,
             },
             orderBy: {
-                createdAt: 'asc',
+                createdAt: 'desc',
             },
+        };
+
+        if (cursor) {
+            queryOptions.cursor = { id: cursor };
+            queryOptions.skip = 1;
+        }
+
+        const messages = await prisma.message.findMany(queryOptions);
+
+        const hasMore = messages.length > limit;
+        const data = hasMore ? messages.slice(0, limit) : messages;
+
+        let nextCursor = null;
+        if (hasMore && data.length > 0) {
+            const lastItem = data[data.length - 1];
+            if (lastItem) nextCursor = lastItem.id;
+        }
+
+        res.json({
+            messages: [...data].reverse(),
+            nextCursor,
+            hasMore
         });
-        res.json(messages);
     } catch (error) {
         console.error('Error fetching messages:', error);
         res.status(500).json({ message: 'Error fetching messages', error });
@@ -62,29 +85,41 @@ export const markBatchRead = async (req: Request, res: Response) => {
 };
 
 export const sendMessage = async (req: any, res: Response) => {
-    const { receiverId, content } = req.body;
-    const senderId = req.user.id;
+    const { receiverId, content, groupId } = req.body;
+    const senderId = req.user?.id;
 
     try {
-        // SECURITY: Check connections
-        const connection = await prisma.friendRequest.findFirst({
-            where: {
-                status: 'ACCEPTED',
-                OR: [
-                    { senderId, receiverId },
-                    { senderId: receiverId, receiverId: senderId }
-                ]
-            }
-        });
+        if (receiverId) {
+            const connection = await prisma.friendRequest.findFirst({
+                where: {
+                    status: 'ACCEPTED',
+                    OR: [
+                        { senderId, receiverId },
+                        { senderId: receiverId, receiverId: senderId }
+                    ]
+                }
+            });
 
-        if (!connection) {
-            return res.status(403).json({ message: 'You can only send messages to accepted friends' });
+            if (!connection) {
+                return res.status(403).json({ message: 'You can only send messages to accepted friends' });
+            }
+        } else if (groupId) {
+            const membership = await prisma.groupMember.findUnique({
+                where: { groupId_userId: { groupId, userId: senderId } }
+            });
+
+            if (!membership || membership.status !== 'ACCEPTED') {
+                return res.status(403).json({ message: 'You must be a member of this group to send messages' });
+            }
+        } else {
+            return res.status(400).json({ message: 'ReceiverId or GroupId is required' });
         }
 
         const message = await prisma.message.create({
             data: {
                 senderId,
-                receiverId,
+                receiverId: receiverId || null,
+                groupId: groupId || null,
                 content,
             },
         });
@@ -95,28 +130,52 @@ export const sendMessage = async (req: any, res: Response) => {
         res.status(500).json({ message: 'Error sending message', error });
     }
 };
+
 export const getGroupMessages = async (req: any, res: Response) => {
     const { groupId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    const cursor = req.query.cursor as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 20;
 
     try {
-        const membership = await prisma.groupMember.findUnique({
-            where: { groupId_userId: { groupId, userId } }
+        const membership = await prisma.groupMember.findFirst({
+            where: { groupId, userId }
         });
 
         if (!membership || membership.status !== 'ACCEPTED') {
             return res.status(403).json({ message: 'You must be a member of this group' });
         }
 
-        const messages = await prisma.message.findMany({
+        const queryOptions: any = {
             where: { groupId },
+            take: limit + 1,
             include: {
                 sender: { select: { id: true, username: true, avatar: true } }
             },
-            orderBy: { createdAt: 'asc' }
-        });
+            orderBy: { createdAt: 'desc' }
+        };
 
-        res.json(messages);
+        if (cursor) {
+            queryOptions.cursor = { id: cursor };
+            queryOptions.skip = 1;
+        }
+
+        const messages = await prisma.message.findMany(queryOptions);
+
+        const hasMore = messages.length > limit;
+        const data = hasMore ? messages.slice(0, limit) : messages;
+
+        let nextCursor = null;
+        if (hasMore && data.length > 0) {
+            const lastItem = data[data.length - 1];
+            if (lastItem) nextCursor = lastItem.id;
+        }
+
+        res.json({
+            messages: [...data].reverse(),
+            nextCursor,
+            hasMore
+        });
     } catch (error) {
         res.status(500).json({ message: 'Error fetching group messages', error });
     }

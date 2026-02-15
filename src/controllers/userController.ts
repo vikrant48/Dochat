@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { prisma } from '../server';
+import prisma from '../lib/prisma';
 
 export const updateProfile = async (req: any, res: Response) => {
     const { username, avatar } = req.body;

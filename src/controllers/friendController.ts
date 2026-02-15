@@ -1,5 +1,6 @@
 import { Response } from 'express';
-import { prisma, io } from '../server';
+import prisma from '../lib/prisma';
+import { io } from '../server';
 
 export const sendFriendRequest = async (req: any, res: Response) => {
     const { receiverId } = req.body;

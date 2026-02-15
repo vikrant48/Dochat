@@ -31,7 +31,7 @@ app.use('/api/friends', friendRoutes);
 app.use('/api/groups', groupRoutes);
 
 app.get('/', (req: Request, res: Response) => {
-    res.send('SocialChat Backend Running');
+    res.send('TimePass Backend Running');
 });
 
 // Socket.io connection logic
@@ -155,4 +155,4 @@ server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
 
-export { prisma, io };
+export { io };

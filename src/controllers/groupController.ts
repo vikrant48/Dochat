@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { prisma, io } from '../server';
+import prisma from '../lib/prisma';
+import { io } from '../server';
 
 export const createGroup = async (req: any, res: Response) => {
     const { name, description, memberIds } = req.body;

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { prisma } from '../server';
+import prisma from '../lib/prisma';
 import generateToken from '../utils/generateToken';
 
 export const getUsers = async (req: Request, res: Response) => {
