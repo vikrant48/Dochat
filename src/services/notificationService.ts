@@ -35,7 +35,8 @@ export const sendPushNotification = async (userId: string, title: string, body: 
             }
         }
 
-        console.log('Notification sent successfully');
+        // Notification sent successfully
+
     } catch (error) {
         console.error('Error in sendPushNotification:', error);
     }

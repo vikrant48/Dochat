@@ -138,11 +138,18 @@ export const getGroupMessages = async (req: any, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 20;
 
     try {
+        const getCharCodes = (s: string) => s.split('').map(c => c.charCodeAt(0)).join(',');
+
+
         const membership = await prisma.groupMember.findFirst({
             where: { groupId, userId }
         });
 
+
+
+
         if (!membership || membership.status !== 'ACCEPTED') {
+            console.warn(`[DENIED] User ${userId} requested messages for group ${groupId}. Membership:`, membership);
             return res.status(403).json({ message: 'You must be a member of this group' });
         }
 

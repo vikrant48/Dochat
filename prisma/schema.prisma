@@ -26,14 +26,22 @@ model User {
   following     Follows[]      @relation("follower")
   groupMemberships GroupMember[] @relation("GroupMemberships")
   stories       Story[]
-  twoFactorEnabled Boolean        @default(false)
-  twoFactorOTP     String?
   reports          Report[]       @relation("Reporter")
   reportedBy       Report[]       @relation("Reported")
   blockedUsers     Block[]        @relation("Blocker")
   blockedBy        Block[]        @relation("Blocked")
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  otp       String
+  status    String   @default("PENDING") // PENDING, VERIFIED
+  expiresAt DateTime
+  resendAt  DateTime
+  createdAt DateTime @default(now())
 }
 
 model Report {

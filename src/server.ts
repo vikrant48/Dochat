@@ -23,8 +23,13 @@ const io = new Server(server, {
 });
 
 app.use(cors());
-app.use(helmet());
+// app.use(helmet());
 app.use(express.json());
+
+app.use((req, res, next) => {
+
+    next();
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
@@ -36,12 +41,13 @@ app.use('/api/follow', followRoutes);
 app.use('/api/privacy', privacyRoutes);
 
 app.get('/', (req: Request, res: Response) => {
+
     res.send('TimePass Backend Running');
 });
 
 // Socket.io connection logic
 io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
+
 
     socket.on('join', (userId: string) => {
         socket.join(userId);
@@ -128,7 +134,7 @@ io.on('connection', (socket) => {
             });
 
             if (!connection) {
-                console.log('Blocking message between non-friends:', data.senderId, data.receiverId);
+
                 io.to(data.senderId).emit('error', { message: 'You must be friends to chat' });
                 return;
             }
@@ -144,7 +150,7 @@ io.on('connection', (socket) => {
             });
 
             if (isBlocked) {
-                console.log('Blocking message due to block:', data.senderId, data.receiverId);
+
                 io.to(data.senderId).emit('error', { message: 'Message blocked' });
                 return;
             }

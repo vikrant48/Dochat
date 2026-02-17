@@ -1,9 +1,10 @@
 import { Response } from 'express';
 import prisma from '../lib/prisma';
+import { getPublicUrl } from '../utils/urlHelper';
 
 export const createStory = async (req: any, res: Response) => {
     const userId = req.user?.id;
-    const imageUrl = req.file?.location; // URL from S3
+    const imageUrl = getPublicUrl(req.file?.location); // URL from S3
 
     if (!imageUrl) {
         return res.status(400).json({ message: 'Story image is required' });
@@ -54,6 +55,7 @@ export const getStories = async (req: any, res: Response) => {
 
         res.json(stories);
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching stories', error });
+        console.error('Error fetching stories:', error);
+        res.status(500).json({ message: 'Error fetching stories', error: error instanceof Error ? error.message : error });
     }
 };

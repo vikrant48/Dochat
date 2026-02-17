@@ -1,10 +1,11 @@
 import { Response } from 'express';
 import prisma from '../lib/prisma';
+import { getPublicUrl } from '../utils/urlHelper';
 
 export const createPost = async (req: any, res: Response) => {
     const { caption } = req.body;
     const userId = req.user?.id;
-    const images = req.files ? (req.files as any[]).map(f => f.location) : [];
+    const images = req.files ? (req.files as any[]).map(f => getPublicUrl(f.location)) : [];
 
     if (images.length === 0) {
         return res.status(400).json({ message: 'At least one image is required' });
@@ -84,7 +85,8 @@ export const getFeed = async (req: any, res: Response) => {
             hasMore
         });
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching feed', error });
+        console.error('Error fetching feed:', error);
+        res.status(500).json({ message: 'Error fetching feed', error: error instanceof Error ? error.message : error });
     }
 };
 
